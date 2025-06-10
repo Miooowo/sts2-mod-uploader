@@ -24,7 +24,7 @@ public static class Program
             new Option<DirectoryInfo>(["--workspace", "-w"], "The workspace directory to upload.")
                 { IsRequired = true };
         
-        Option<ulong?> uploadItemIdOption = new Option<ulong?>(["--id", "-i"], "The ID of the workshop item to update. If this is not specified, a new item is created.");
+        Option<ulong?> uploadItemIdOption = new Option<ulong?>(["--id", "-i"], "The ID of the workshop item to update. If this is not specified, we'll look for mod_id.txt in the workspace. If it is also not present, a new item is created.");
 
         Command newCommand = new("new", "Create a new workspace for a new mod.")
         {

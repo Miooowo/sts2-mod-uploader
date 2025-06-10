@@ -6,6 +6,7 @@ namespace ModUploader;
 public static class UploadCommand
 {
     private static AppId_t _sts2AppId = new(2868840);
+    private static bool _steamIsInitialized;
     
     private static readonly JsonSerializerOptions _serializerOptions = new()
     {
@@ -13,7 +14,7 @@ public static class UploadCommand
         IncludeFields = true,
     };
     
-    public static async Task<int> UploadWorkspace(DirectoryInfo workspaceDirectory, ulong? existingItemId)
+    public static async Task<int> UploadWorkspace(DirectoryInfo workspaceDirectory, ulong? itemIdArg)
     {
         // First, do some validation of what is in the directory.
         FileInfo imageFileInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "image.jpg"));
@@ -31,7 +32,7 @@ public static class UploadCommand
         }
 
         FileInfo configJsonInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "config.json"));
-        if (!imageFileInfo.Exists)
+        if (!configJsonInfo.Exists)
         {
             Log.Info($"There is no file named config.json in the workspace!");
             return 1;
@@ -62,6 +63,25 @@ public static class UploadCommand
             return 1;
         }
 
+        ulong? modIdTxt = null;
+        
+        FileInfo modIdFile = new(Path.Combine(workspaceDirectory.FullName, "mod_id.txt"));
+        if (modIdFile.Exists)
+        {
+            await using FileStream modIdStream = modIdFile.OpenRead();
+            using StreamReader reader = new(modIdStream);
+            string modIdStr = (await reader.ReadToEndAsync()).Trim();
+
+            if (!ulong.TryParse(modIdStr, out ulong modId))
+            {
+                Log.Info("Tried to read mod ID from mod_id.txt, but the text could not be parsed as a mod ID!");
+                return 1;
+            }
+
+            modIdTxt = modId;
+        }
+
+        // Validation is all done. Start the upload process.
         Log.Info("Initializing Steam");
 
         try
@@ -80,18 +100,32 @@ public static class UploadCommand
             return 1;
         }
         
+        // Start running callbacks, otherwise we will never get steam call results
+        _steamIsInitialized = true;
         _ = DoRunCallbacks();
         
+        Log.Info("--------");
         Log.Info($"By submitting '{modConfig.title}' to the workshop, you agree to the Steam Workshop terms of service:\nhttps://steamcommunity.com/sharedfiles/workshoplegalagreement");
+        Log.Info("--------");
 
         PublishedFileId_t workshopItem;
 
-        if (existingItemId == null)
+        if (itemIdArg != null)
+        {
+            Log.Info($"Uploading to ID {itemIdArg.Value} passed in command line");
+            workshopItem = new PublishedFileId_t(itemIdArg.Value);
+        }
+        else if (modIdTxt != null)
+        {
+            Log.Info($"Uploading to ID {modIdTxt.Value} from mod_id.txt");
+            workshopItem = new PublishedFileId_t(modIdTxt.Value);
+        }
+        else
         {
             Log.Info("Creating new workshop item...");
 
             SteamAPICall_t createItemCall = SteamUGC.CreateItem(_sts2AppId, EWorkshopFileType.k_EWorkshopFileTypeCommunity);
-            SteamCallResult<CreateItemResult_t> createItemCallResult = new(createItemCall);
+            using SteamCallResult<CreateItemResult_t> createItemCallResult = new(createItemCall);
             CreateItemResult_t createItemResult = await createItemCallResult.Task;
 
             if (createItemResult.m_eResult != EResult.k_EResultOK)
@@ -101,10 +135,6 @@ public static class UploadCommand
             }
 
             workshopItem = createItemResult.m_nPublishedFileId;
-        }
-        else
-        {
-            workshopItem = new PublishedFileId_t(existingItemId.Value);
         }
         
         Log.Info($"Uploading '{modConfig.title}' to the steam workshop with item ID {workshopItem.m_PublishedFileId}...");
@@ -119,7 +149,7 @@ public static class UploadCommand
         SteamUGC.SetItemPreview(updateHandle, imageFileInfo.FullName);
 
         SteamAPICall_t updateItemCall = SteamUGC.SubmitItemUpdate(updateHandle, modConfig.changeNote);
-        SteamCallResult<SubmitItemUpdateResult_t> updateItemCallResult = new(updateItemCall);
+        using SteamCallResult<SubmitItemUpdateResult_t> updateItemCallResult = new(updateItemCall);
 
         CancellationTokenSource uploadProgressCancelToken = new();
         _ = LogUploadProgress(updateHandle, uploadProgressCancelToken);
@@ -134,8 +164,18 @@ public static class UploadCommand
 
         Log.Info($"Successfully uploaded '{modConfig.title}' to the workshop with id {workshopItem.m_PublishedFileId}! Browsing to the item in Steam.");
         SteamFriends.ActivateGameOverlayToWebPage($"steam://url/CommunityFilePage/{workshopItem.m_PublishedFileId}");
+        
+        // Since we successfully uploaded, if it didn't exist already, put a mod_id.txt in the directory for later, to
+        // identify which mod ID this is.
+        if (modIdTxt == null || modIdTxt.Value != workshopItem.m_PublishedFileId)
+        {
+            await using FileStream fileStream = modIdFile.OpenWrite();
+            await using StreamWriter writer = new(fileStream);
+            writer.WriteLine(workshopItem.m_PublishedFileId);
+        }
 
         SteamAPI.Shutdown();
+        _steamIsInitialized = false;
         
         return 0;
     }
@@ -154,7 +194,7 @@ public static class UploadCommand
     private static async Task DoRunCallbacks()
     {
         // RunCallbacks must be run periodically to flush call results
-        while (true)
+        while (_steamIsInitialized)
         {
             SteamAPI.RunCallbacks();
             await Task.Delay(50);
