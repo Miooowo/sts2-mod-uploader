@@ -10,9 +10,15 @@ public static class Program
         // straight to upload if it does
         if (args.Length > 0 && new DirectoryInfo(args[0]).Exists)
         {
+            UploadCommand.UploadWorkspace(new DirectoryInfo(args[0]), null).RunSynchronously();
+            return 0;
+        }
+
+        if (args.Length == 0)
+        {
             Log.Info(
                 "Since you have supplied no arguments, I'll create a workspace in a default location.\nAdd --help to the command if you wish to know what else this program can do.");
-            UploadCommand.UploadWorkspace(new DirectoryInfo(args[0]), null).RunSynchronously();
+            NewCommand.CreateNewWorkspace();
             return 0;
         }
 
@@ -57,7 +63,6 @@ public static class Program
         rootCommand.AddCommand(newCommand);
         rootCommand.AddCommand(uploadCommand);
         rootCommand.AddCommand(removeCommand);
-        rootCommand.SetHandler(NewCommand.CreateNewWorkspace);
 
         return rootCommand.InvokeAsync(args).Result;
     }

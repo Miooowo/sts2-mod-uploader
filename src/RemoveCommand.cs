@@ -5,7 +5,6 @@ namespace ModUploader;
 
 public static class RemoveCommand
 {
-    private static AppId_t _sts2AppId = new(2868840);
     private static bool _steamIsInitialized;
     
     public static async Task<int> Remove(DirectoryInfo? workspaceDirectory, ulong? itemIdArg)

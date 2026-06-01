@@ -5,7 +5,7 @@ namespace ModUploader;
 
 public static class UploadCommand
 {
-    private static AppId_t _sts2AppId = new(2868840);
+    private static readonly AppId_t _sts2AppId = new(2868840);
     private static bool _steamIsInitialized;
     
     private static readonly JsonSerializerOptions _serializerOptions = new()
@@ -31,10 +31,10 @@ public static class UploadCommand
             return 1;
         }
 
-        FileInfo configJsonInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "config.json"));
+        FileInfo configJsonInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "workshop.json"));
         if (!configJsonInfo.Exists)
         {
-            Log.Info($"There is no file named config.json in the workspace!");
+            Log.Info("There is no file named workshop.json in the workspace!");
             return 1;
         }
 
@@ -47,19 +47,19 @@ public static class UploadCommand
         }
         catch (JsonException)
         {
-            Log.Info($"Exception thrown while parsing your mod config! Double-check that the format is correct.");
+            Log.Info("Exception thrown while parsing the workshop config! Double-check that the format is correct.");
             throw;
         }
 
         if (modConfig == null)
         {
-            Log.Info($"Tried to parse config.json, but it returned null!");
+            Log.Info("Tried to parse workshop.json, but it returned null!");
             return 1;
         }
 
         if (VisibiltyFromString(modConfig.visibility) == null)
         {
-            Log.Info($"Invalid visibility '{modConfig.visibility}' in config.json! Should be: private, public, unlisted, or friends_only");
+            Log.Info($"Invalid visibility '{modConfig.visibility}' in workshop.json! Should be: private, public, unlisted, or friends_only");
             return 1;
         }
 
@@ -104,20 +104,24 @@ public static class UploadCommand
         _steamIsInitialized = true;
         _ = DoRunCallbacks();
         
-        Log.Info("--------");
-        Log.Info($"By submitting '{modConfig.title}' to the workshop, you agree to the Steam Workshop terms of service:\nhttps://steamcommunity.com/sharedfiles/workshoplegalagreement");
-        Log.Info("--------");
+        Log.Info("=================");
+        Log.Info($"By submitting '{modConfig.title}' to the workshop,\n" +
+                 $"you agree to the Steam Workshop terms of service:\n" +
+                 $"https://steamcommunity.com/sharedfiles/workshoplegalagreement");
+        Log.Info("=================");
 
         PublishedFileId_t workshopItem;
+        
+        Log.Info($"Logged in as user '{SteamFriends.GetPersonaName()}'.");
 
         if (itemIdArg != null)
         {
-            Log.Info($"Uploading to ID {itemIdArg.Value} passed in command line");
+            Log.Info($"Using workshop item ID {itemIdArg.Value} passed in via command line");
             workshopItem = new PublishedFileId_t(itemIdArg.Value);
         }
         else if (modIdTxt != null)
         {
-            Log.Info($"Uploading to ID {modIdTxt.Value} from mod_id.txt");
+            Log.Info($"Using workshop item ID {modIdTxt.Value} from mod_id.txt");
             workshopItem = new PublishedFileId_t(modIdTxt.Value);
         }
         else
@@ -161,6 +165,8 @@ public static class UploadCommand
             Log.Info($"Error occurred while uploading to the workshop! Result: {updateItemResult.m_eResult}");
             return 1;
         }
+        
+        await UpdateDependencies(workshopItem, modConfig.dependencies ?? []);
 
         Log.Info($"Successfully uploaded '{modConfig.title}' to the workshop with id {workshopItem.m_PublishedFileId}! Browsing to the item in Steam.");
         SteamFriends.ActivateGameOverlayToWebPage($"steam://url/CommunityFilePage/{workshopItem.m_PublishedFileId}");
@@ -178,6 +184,81 @@ public static class UploadCommand
         _steamIsInitialized = false;
         
         return 0;
+    }
+
+    private static async Task UpdateDependencies(PublishedFileId_t workshopItem, List<ulong> newDependencies)
+    {
+        List<ulong> existingDependencies = await GetAppDependencies(workshopItem);
+        bool modified = false;
+        
+        // Iterate new dependencies, adding dependencies that didn't exist
+        foreach (ulong dependency in newDependencies)
+        {
+            if (!existingDependencies.Contains(dependency))
+            {
+                SteamUGC.AddDependency(workshopItem, new PublishedFileId_t(dependency));
+                Log.Info($"Added dependency on {dependency}");
+                modified = true;
+            }
+        }
+        
+        // Iterate existing dependencies, removing dependencies that no longer exist
+        foreach (ulong dependency in existingDependencies)
+        {
+            if (!newDependencies.Contains(dependency))
+            {
+                SteamUGC.RemoveDependency(workshopItem, new PublishedFileId_t(dependency));
+                Log.Info($"Removed dependency on {dependency}");
+                modified = true;
+            }
+        }
+
+        if (!modified)
+        {
+            Log.Info("No modifications were made to dependencies.");
+        }
+    }
+
+    private static async Task<List<ulong>> GetAppDependencies(PublishedFileId_t workshopItem)
+    {
+        Log.Info("Querying existing app dependencies... ");
+        
+        UGCQueryHandle_t handle = SteamUGC.CreateQueryUGCDetailsRequest([workshopItem], 1);
+        SteamAPICall_t call = SteamUGC.SendQueryUGCRequest(handle);
+        using SteamCallResult<SteamUGCQueryCompleted_t> callResult = new(call);
+        SteamUGCQueryCompleted_t result = await callResult.Task;
+
+        if (result.m_eResult != EResult.k_EResultOK)
+        {
+            Log.Info($"Couldn't get dependencies for item {workshopItem.m_PublishedFileId}! Error: {result.m_eResult}");
+            return [];
+        }
+
+        bool success;
+        uint index = 0;
+        PublishedFileId_t[] cache = new PublishedFileId_t[4];
+        List<ulong> dependencies = [];
+
+        do
+        {
+            success = SteamUGC.GetQueryUGCChildren(result.m_handle, index, cache, (uint)cache.Length);
+            foreach (PublishedFileId_t dependency in cache)
+            {
+                if (dependency.m_PublishedFileId != 0)
+                {
+                    dependencies.Add(dependency.m_PublishedFileId);
+                }
+            }
+
+            index += (uint)cache.Length;
+        } while (success);
+
+        if (dependencies.Count > 0)
+        {
+            Log.Info($"Found {dependencies.Count} dependencies.");
+        }
+
+        return dependencies;
     }
 
     private static async Task LogUploadProgress(UGCUpdateHandle_t updateHandle, CancellationTokenSource cancelToken)
@@ -201,7 +282,7 @@ public static class UploadCommand
         }
     }
 
-    private static ERemoteStoragePublishedFileVisibility? VisibiltyFromString(string visibility)
+    private static ERemoteStoragePublishedFileVisibility? VisibiltyFromString(string? visibility)
     {
         return visibility switch
         {
