@@ -16,10 +16,10 @@ public static class UploadCommand
         }
         
         // First, do some validation of what is in the directory.
-        FileInfo imageFileInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "image.jpg"));
+        FileInfo imageFileInfo = new FileInfo(Path.Combine(workspaceDirectory.FullName, "image.png"));
         if (!imageFileInfo.Exists)
         {
-            Log.Error("There is no file named image.jpg in the workspace!");
+            Log.Error("There is no file named image.png in the workspace!");
             return 1;
         }
 
