@@ -7,7 +7,7 @@ public static class Log
 
     static Log()
     {
-        FileStream = new FileStream("mod-uploader.log", FileMode.OpenOrCreate);
+        FileStream = new FileStream("mod-uploader.log", FileMode.Create);
         StreamWriter = new StreamWriter(FileStream);
     }
 
