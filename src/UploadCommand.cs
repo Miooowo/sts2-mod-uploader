@@ -227,7 +227,7 @@ public static class UploadCommand
         // identify which mod ID this is.
         if (modIdTxt == null || modIdTxt.Value != workshopItem.m_PublishedFileId)
         {
-            await using FileStream fileStream = modIdFile.OpenWrite();
+            await using FileStream fileStream = modIdFile.Open(FileMode.Create);
             await using StreamWriter writer = new(fileStream);
             writer.WriteLine(workshopItem.m_PublishedFileId);
         }
