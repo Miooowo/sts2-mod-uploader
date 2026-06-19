@@ -149,7 +149,7 @@ public static class Program
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new UploaderForm());
+        Application.Run(new HomeForm());
     }
 #endif
 

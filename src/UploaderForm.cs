@@ -8,23 +8,45 @@ public class UploaderForm : Form
 {
     private static readonly string[] DefaultTags =
     [
+        "Acts",
+        "Ancients",
+        "Audio",
         "Cards",
-        "Relics",
         "Characters",
-        "Encounters",
+        "Cosmetics",
         "Events",
-        "Balance",
+        "Expansion",
+        "Extensions",
+        "Humor",
+        "Modifiers",
+        "Monsters",
+        "Potions",
         "QoL",
-        "Tool"
+        "Relics",
+        "Rooms",
+        "Tools & APIs",
+        "Utility",
+        "Misc"
     ];
 
     private readonly TextBox _workspacePathTextBox = new() { ReadOnly = true };
     private readonly TextBox _itemIdTextBox = new();
     private readonly TextBox _titleTextBox = new();
+    private readonly CheckBox _updateDetailsCheckBox = new() { Text = "更新名称与描述", Checked = true };
     private readonly TextBox _descriptionTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
     private readonly TextBox _changeNoteTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
+    private readonly CheckBox _updateChangeNoteCheckBox = new() { Text = "更新说明", Checked = true };
     private readonly ComboBox _visibilityComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly CheckedListBox _tagsCheckedListBox = new();
+    private readonly FlowLayoutPanel _tagsFlowPanel = new()
+    {
+        AutoScroll = true,
+        WrapContents = true,
+        FlowDirection = FlowDirection.LeftToRight,
+        Margin = new Padding(0),
+        Padding = new Padding(4, 4, 4, 4)
+    };
+    private readonly List<CheckBox> _tagCheckBoxes = [];
+    private readonly CheckBox _updateTagsCheckBox = new() { Text = "更新标签", Checked = true };
     private readonly TextBox _customTagsTextBox = new();
     private readonly TextBox _dependenciesTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
     private readonly TextBox _statusTextBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
@@ -47,8 +69,21 @@ public class UploaderForm : Form
 
         foreach (string tag in DefaultTags)
         {
-            _tagsCheckedListBox.Items.Add(tag);
+            CheckBox tagCheckBox = new()
+            {
+                Text = tag,
+                AutoSize = false,
+                Width = 155,
+                Height = 28,
+                Margin = new Padding(4, 2, 8, 2)
+            };
+            _tagCheckBoxes.Add(tagCheckBox);
+            _tagsFlowPanel.Controls.Add(tagCheckBox);
         }
+
+        _updateDetailsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
+        _updateChangeNoteCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
+        _updateTagsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
 
         _dropHintLabel.Text = "将 Mod 工作区文件夹拖拽到此窗口，或点击“选择文件夹”";
         _dropHintLabel.Dock = DockStyle.Top;
@@ -85,8 +120,8 @@ public class UploaderForm : Form
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // 2: 标题
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // 3: 可见性
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 170)); // 4: 描述
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 170)); // 5: 更新说明
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 120)); // 6: Tag
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); // 5: 更新说明
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 190)); // 6: Tag
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // 7: 依赖
 
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -127,21 +162,75 @@ public class UploaderForm : Form
 
         AddRow(table, 0, "工作区", _workspacePathTextBox, chooseWorkspaceButton);
         AddRow(table, 1, "Item ID(可选)", _itemIdTextBox, reloadWorkspaceButton);
-        AddRow(table, 2, "标题", _titleTextBox, null);
+        AddRow(table, 2, "标题", _titleTextBox, _updateDetailsCheckBox);
         AddRow(table, 3, "可见性", _visibilityComboBox, saveConfigButton);
         AddRow(table, 4, "描述", _descriptionTextBox, null);
-        AddRow(table, 5, "更新说明", _changeNoteTextBox, uploadButton);
+        
+        Label changeNoteLabel = new()
+        {
+            Text = "更新说明",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
+        };
+        table.Controls.Add(changeNoteLabel, 0, 5);
+        _changeNoteTextBox.Dock = DockStyle.Fill;
+        table.Controls.Add(_changeNoteTextBox, 1, 5);
+
+        TableLayoutPanel noteActionPanel = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(0)
+        };
+        noteActionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        noteActionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        noteActionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        _updateChangeNoteCheckBox.Dock = DockStyle.Fill;
+        noteActionPanel.Controls.Add(_updateChangeNoteCheckBox, 0, 0);
+        uploadButton.Text = "发布到创意工坊";
+        uploadButton.Dock = DockStyle.Fill;
+        noteActionPanel.Controls.Add(uploadButton, 0, 2);
+        table.Controls.Add(noteActionPanel, 2, 5);
+        table.SetColumnSpan(noteActionPanel, 2);
 
         Label tagsLabel = new() { Text = "Tag 选择", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
         table.Controls.Add(tagsLabel, 0, 6);
         table.SetColumnSpan(tagsLabel, 1);
-        _tagsCheckedListBox.Dock = DockStyle.Fill;
-        table.Controls.Add(_tagsCheckedListBox, 1, 6);
 
+        TableLayoutPanel tagsPanel = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0)
+        };
+        tagsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        tagsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        TableLayoutPanel tagsHeaderPanel = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(0)
+        };
+        tagsHeaderPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        tagsHeaderPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        tagsHeaderPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        _updateTagsCheckBox.Dock = DockStyle.Fill;
+        tagsHeaderPanel.Controls.Add(_updateTagsCheckBox, 0, 0);
         Label customTagsLabel = new() { Text = "自定义Tag(逗号分隔)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-        table.Controls.Add(customTagsLabel, 2, 6);
-        _customTagsTextBox.Dock = DockStyle.Top;
-        table.Controls.Add(_customTagsTextBox, 3, 6);
+        tagsHeaderPanel.Controls.Add(customTagsLabel, 1, 0);
+        _customTagsTextBox.Dock = DockStyle.Fill;
+        tagsHeaderPanel.Controls.Add(_customTagsTextBox, 2, 0);
+
+        _tagsFlowPanel.Dock = DockStyle.Fill;
+        tagsPanel.Controls.Add(tagsHeaderPanel, 0, 0);
+        tagsPanel.Controls.Add(_tagsFlowPanel, 0, 1);
+        table.Controls.Add(tagsPanel, 1, 6);
+        table.SetColumnSpan(tagsPanel, 3);
 
         Label dependenciesLabel = new() { Text = "依赖ID(逗号/换行分隔)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
         table.Controls.Add(dependenciesLabel, 0, 7);
@@ -174,6 +263,7 @@ public class UploaderForm : Form
 
         if (actionControl != null)
         {
+            actionControl.Dock = DockStyle.Fill;
             table.Controls.Add(actionControl, 2, row);
             table.SetColumnSpan(actionControl, 2);
         }
@@ -265,10 +355,15 @@ public class UploaderForm : Form
         _customTagsTextBox.Text = string.Empty;
         _dependenciesTextBox.Text = string.Empty;
 
-        for (int i = 0; i < _tagsCheckedListBox.Items.Count; i++)
+        foreach (CheckBox tagCheckBox in _tagCheckBoxes)
         {
-            _tagsCheckedListBox.SetItemChecked(i, false);
+            tagCheckBox.Checked = false;
         }
+
+        _updateDetailsCheckBox.Checked = true;
+        _updateChangeNoteCheckBox.Checked = true;
+        _updateTagsCheckBox.Checked = true;
+        UpdateSectionEnabledState();
     }
 
     private void ApplyConfigToForm(ModConfig config)
@@ -277,6 +372,9 @@ public class UploaderForm : Form
         _titleTextBox.Text = config.title ?? string.Empty;
         _descriptionTextBox.Text = config.description ?? string.Empty;
         _changeNoteTextBox.Text = config.changeNote ?? string.Empty;
+        _updateDetailsCheckBox.Checked = config.title != null || config.description != null;
+        _updateChangeNoteCheckBox.Checked = config.changeNote != null;
+        _updateTagsCheckBox.Checked = config.tags != null;
 
         if (!string.IsNullOrWhiteSpace(config.visibility) && _visibilityComboBox.Items.Contains(config.visibility))
         {
@@ -286,10 +384,11 @@ public class UploaderForm : Form
         List<string> customTags = [];
         foreach (string tag in config.tags ?? [])
         {
-            int index = _tagsCheckedListBox.Items.IndexOf(tag);
-            if (index >= 0)
+            CheckBox? tagCheckBox = _tagCheckBoxes.FirstOrDefault(
+                c => string.Equals(c.Text, tag, StringComparison.OrdinalIgnoreCase));
+            if (tagCheckBox != null)
             {
-                _tagsCheckedListBox.SetItemChecked(index, true);
+                tagCheckBox.Checked = true;
             }
             else
             {
@@ -299,6 +398,7 @@ public class UploaderForm : Form
 
         _customTagsTextBox.Text = string.Join(", ", customTags);
         _dependenciesTextBox.Text = string.Join(Environment.NewLine, config.dependencies ?? []);
+        UpdateSectionEnabledState();
     }
 
     private bool SaveWorkshopConfig(bool showSuccessMessage)
@@ -311,11 +411,11 @@ public class UploaderForm : Form
 
         ModConfig config = new()
         {
-            title = EmptyToNull(_titleTextBox.Text),
-            description = EmptyToNull(_descriptionTextBox.Text),
-            changeNote = EmptyToNull(_changeNoteTextBox.Text),
+            title = _updateDetailsCheckBox.Checked ? EmptyToNull(_titleTextBox.Text) : null,
+            description = _updateDetailsCheckBox.Checked ? EmptyToNull(_descriptionTextBox.Text) : null,
+            changeNote = _updateChangeNoteCheckBox.Checked ? EmptyToNull(_changeNoteTextBox.Text) : null,
             visibility = _visibilityComboBox.SelectedItem?.ToString() ?? "private",
-            tags = BuildTags(),
+            tags = _updateTagsCheckBox.Checked ? BuildTags() : null,
             dependencies = BuildDependencies()
         };
 
@@ -402,9 +502,14 @@ public class UploaderForm : Form
     private List<string> BuildTags()
     {
         List<string> tags = [];
-        foreach (object checkedItem in _tagsCheckedListBox.CheckedItems)
+        foreach (CheckBox tagCheckBox in _tagCheckBoxes)
         {
-            string value = checkedItem.ToString() ?? string.Empty;
+            if (!tagCheckBox.Checked)
+            {
+                continue;
+            }
+
+            string value = tagCheckBox.Text ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(value))
             {
                 tags.Add(value.Trim());
@@ -446,6 +551,24 @@ public class UploaderForm : Form
     private static string? EmptyToNull(string text)
     {
         return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    private void UpdateSectionEnabledState()
+    {
+        bool updateDetails = _updateDetailsCheckBox.Checked;
+        bool updateChangeNote = _updateChangeNoteCheckBox.Checked;
+        bool updateTags = _updateTagsCheckBox.Checked;
+
+        _titleTextBox.Enabled = updateDetails;
+        _descriptionTextBox.Enabled = updateDetails;
+
+        _changeNoteTextBox.Enabled = updateChangeNote;
+
+        foreach (CheckBox tagCheckBox in _tagCheckBoxes)
+        {
+            tagCheckBox.Enabled = updateTags;
+        }
+        _customTagsTextBox.Enabled = updateTags;
     }
 
     private void HandleLogMessage(string message)

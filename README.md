@@ -23,6 +23,7 @@ After running the uploader, you should see a file called "mod-uploader.log" appe
 On Windows, running `ModUploader.exe` with **no arguments** now opens a desktop GUI.
 
 ### Features
+- Home screen with two actions: create workspace folder or open publish page.
 - Select the mod workspace folder with a picker.
 - Drag and drop a workspace folder onto the window.
 - Edit workshop fields (`title`, `description`, `changeNote`).
