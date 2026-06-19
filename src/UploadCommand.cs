@@ -217,6 +217,15 @@ public static class UploadCommand
             Log.Error($"Error occurred while uploading to the workshop! Result: {updateItemResult.m_eResult}");
             return 1;
         }
+
+        bool localizedOk = await UpdateLocalizedMetadata(
+            workshopItem,
+            modConfig.localizedTitles,
+            modConfig.localizedDescriptions);
+        if (!localizedOk)
+        {
+            return 1;
+        }
         
         await UpdateDependencies(workshopItem, modConfig.dependencies ?? []);
 
@@ -372,5 +381,97 @@ public static class UploadCommand
             "friends_only" => ERemoteStoragePublishedFileVisibility.k_ERemoteStoragePublishedFileVisibilityFriendsOnly,
             _ => null
         };
+    }
+
+    private static async Task<bool> UpdateLocalizedMetadata(
+        PublishedFileId_t workshopItem,
+        Dictionary<string, string>? localizedTitles,
+        Dictionary<string, string>? localizedDescriptions)
+    {
+        HashSet<string> languages = [];
+        if (localizedTitles != null)
+        {
+            foreach (string language in localizedTitles.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    languages.Add(language.Trim());
+                }
+            }
+        }
+
+        if (localizedDescriptions != null)
+        {
+            foreach (string language in localizedDescriptions.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    languages.Add(language.Trim());
+                }
+            }
+        }
+
+        if (languages.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (string language in languages.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            UGCUpdateHandle_t handle = SteamUGC.StartItemUpdate(_sts2AppId, workshopItem);
+
+            if (!SteamUGC.SetItemUpdateLanguage(handle, language))
+            {
+                Log.Error($"Failed to switch workshop update language to '{language}'.");
+                return false;
+            }
+
+            bool hasAnyField = false;
+            string? title = null;
+            string? description = null;
+            bool hasTitle = localizedTitles != null && localizedTitles.TryGetValue(language, out title);
+            bool hasDescription = localizedDescriptions != null &&
+                                  localizedDescriptions.TryGetValue(language, out description);
+
+            if (hasTitle &&
+                !string.IsNullOrWhiteSpace(title) &&
+                !SteamUGC.SetItemTitle(handle, title))
+            {
+                Log.Warn($"Failed to set localized title for '{language}'.");
+            }
+            else if (!string.IsNullOrWhiteSpace(title))
+            {
+                hasAnyField = true;
+            }
+
+            if (hasDescription &&
+                !string.IsNullOrWhiteSpace(description) &&
+                !SteamUGC.SetItemDescription(handle, description))
+            {
+                Log.Warn($"Failed to set localized description for '{language}'.");
+            }
+            else if (!string.IsNullOrWhiteSpace(description))
+            {
+                hasAnyField = true;
+            }
+
+            if (!hasAnyField)
+            {
+                continue;
+            }
+
+            SteamAPICall_t updateCall = SteamUGC.SubmitItemUpdate(handle, "");
+            using SteamCallResult<SubmitItemUpdateResult_t> updateResultCall = new(updateCall);
+            SubmitItemUpdateResult_t updateResult = await updateResultCall.Task;
+            if (updateResult.m_eResult != EResult.k_EResultOK)
+            {
+                Log.Error($"Failed to submit localized metadata for '{language}'. Result: {updateResult.m_eResult}");
+                return false;
+            }
+
+            Log.Info($"Updated localized title/description for '{language}'.");
+        }
+
+        return true;
     }
 }

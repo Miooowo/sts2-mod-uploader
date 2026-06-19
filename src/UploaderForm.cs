@@ -6,6 +6,13 @@ namespace ModUploader;
 
 public class UploaderForm : Form
 {
+    private sealed class LanguageOption
+    {
+        public required string Code { get; init; }
+        public required string DisplayName { get; init; }
+        public override string ToString() => $"{DisplayName} ({Code})";
+    }
+
     private static readonly string[] DefaultTags =
     [
         "Acts",
@@ -29,11 +36,33 @@ public class UploaderForm : Form
         "Misc"
     ];
 
+    private static readonly LanguageOption[] CommonLanguageOptions =
+    [
+        new() { Code = "english", DisplayName = "English" },
+        new() { Code = "schinese", DisplayName = "简体中文" },
+        new() { Code = "tchinese", DisplayName = "繁體中文" },
+        new() { Code = "japanese", DisplayName = "日本語" },
+        new() { Code = "koreana", DisplayName = "한국어" },
+        new() { Code = "french", DisplayName = "Français" },
+        new() { Code = "german", DisplayName = "Deutsch" },
+        new() { Code = "spanish", DisplayName = "Español" },
+        new() { Code = "russian", DisplayName = "Русский" },
+        new() { Code = "portuguese", DisplayName = "Português" },
+        new() { Code = "brazilian", DisplayName = "Português (Brasil)" },
+        new() { Code = "italian", DisplayName = "Italiano" },
+        new() { Code = "polish", DisplayName = "Polski" },
+        new() { Code = "thai", DisplayName = "ไทย" }
+    ];
+
     private readonly TextBox _workspacePathTextBox = new() { ReadOnly = true };
     private readonly TextBox _itemIdTextBox = new();
     private readonly TextBox _titleTextBox = new();
     private readonly CheckBox _updateDetailsCheckBox = new() { Text = "更新名称与描述", Checked = true };
     private readonly TextBox _descriptionTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
+    private readonly CheckBox _updateLocalizedDetailsCheckBox = new() { Text = "更新多语言标题与描述", Checked = false };
+    private readonly TextBox _localizedDetailsTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
+    private readonly ComboBox _languageCodeComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Button _insertLanguageTemplateButton = new() { Text = "插入语言模板" };
     private readonly TextBox _changeNoteTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
     private readonly CheckBox _updateChangeNoteCheckBox = new() { Text = "更新说明", Checked = true };
     private readonly ComboBox _visibilityComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -48,6 +77,7 @@ public class UploaderForm : Form
     private readonly List<CheckBox> _tagCheckBoxes = [];
     private readonly CheckBox _updateTagsCheckBox = new() { Text = "更新标签", Checked = true };
     private readonly TextBox _customTagsTextBox = new();
+    private readonly CheckBox _updateDependenciesCheckBox = new() { Text = "更新依赖", Checked = false };
     private readonly TextBox _dependenciesTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
     private readonly TextBox _statusTextBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
     private readonly Label _dropHintLabel = new();
@@ -82,8 +112,17 @@ public class UploaderForm : Form
         }
 
         _updateDetailsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
+        _updateLocalizedDetailsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
         _updateChangeNoteCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
         _updateTagsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
+        _updateDependenciesCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
+
+        _languageCodeComboBox.Items.AddRange(CommonLanguageOptions);
+        if (_languageCodeComboBox.Items.Count > 0)
+        {
+            _languageCodeComboBox.SelectedIndex = 0;
+        }
+        _insertLanguageTemplateButton.Click += (_, _) => InsertLanguageTemplate();
 
         _dropHintLabel.Text = "将 Mod 工作区文件夹拖拽到此窗口，或点击“选择文件夹”";
         _dropHintLabel.Dock = DockStyle.Top;
@@ -107,7 +146,7 @@ public class UploaderForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12, 8, 12, 12),
             ColumnCount = 4,
-            RowCount = 9
+            RowCount = 10
         };
 
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
@@ -119,12 +158,12 @@ public class UploaderForm : Form
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // 1: Item ID
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // 2: 标题
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // 3: 可见性
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 170)); // 4: 描述
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); // 5: 更新说明
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 190)); // 6: Tag
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // 7: 依赖
-
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); // 4: 描述
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 110)); // 5: 多语言
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));  // 6: 更新说明
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 150)); // 7: Tag
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // 8: 依赖
+        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // 9: 日志
 
         Button chooseWorkspaceButton = new()
         {
@@ -165,16 +204,65 @@ public class UploaderForm : Form
         AddRow(table, 2, "标题", _titleTextBox, _updateDetailsCheckBox);
         AddRow(table, 3, "可见性", _visibilityComboBox, saveConfigButton);
         AddRow(table, 4, "描述", _descriptionTextBox, null);
-        
+
+        Label localizedLabel = new()
+        {
+            Text = "多语言(每行: 语言|标题|描述)",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
+        };
+        table.Controls.Add(localizedLabel, 0, 5);
+        _localizedDetailsTextBox.Dock = DockStyle.Fill;
+        table.Controls.Add(_localizedDetailsTextBox, 1, 5);
+
+        TableLayoutPanel localizedActionPanel = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(0)
+        };
+        localizedActionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        localizedActionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        localizedActionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _updateLocalizedDetailsCheckBox.Dock = DockStyle.Fill;
+        localizedActionPanel.Controls.Add(_updateLocalizedDetailsCheckBox, 0, 0);
+
+        TableLayoutPanel localizedHelperPanel = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0)
+        };
+        localizedHelperPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        localizedHelperPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        _languageCodeComboBox.Dock = DockStyle.Fill;
+        localizedHelperPanel.Controls.Add(_languageCodeComboBox, 0, 0);
+        _insertLanguageTemplateButton.Dock = DockStyle.Fill;
+        localizedHelperPanel.Controls.Add(_insertLanguageTemplateButton, 1, 0);
+        localizedActionPanel.Controls.Add(localizedHelperPanel, 0, 1);
+
+        Label localizedHintLabel = new()
+        {
+            Text = "每行: 语言|标题|描述。描述换行请写 \\n（会自动转成真实换行）",
+            Dock = DockStyle.Top,
+            AutoSize = false,
+            Height = 24
+        };
+        localizedActionPanel.Controls.Add(localizedHintLabel, 0, 2);
+        table.Controls.Add(localizedActionPanel, 2, 5);
+        table.SetColumnSpan(localizedActionPanel, 2);
+
         Label changeNoteLabel = new()
         {
             Text = "更新说明",
             TextAlign = ContentAlignment.MiddleLeft,
             Dock = DockStyle.Fill
         };
-        table.Controls.Add(changeNoteLabel, 0, 5);
+        table.Controls.Add(changeNoteLabel, 0, 6);
         _changeNoteTextBox.Dock = DockStyle.Fill;
-        table.Controls.Add(_changeNoteTextBox, 1, 5);
+        table.Controls.Add(_changeNoteTextBox, 1, 6);
 
         TableLayoutPanel noteActionPanel = new()
         {
@@ -191,11 +279,11 @@ public class UploaderForm : Form
         uploadButton.Text = "发布到创意工坊";
         uploadButton.Dock = DockStyle.Fill;
         noteActionPanel.Controls.Add(uploadButton, 0, 2);
-        table.Controls.Add(noteActionPanel, 2, 5);
+        table.Controls.Add(noteActionPanel, 2, 6);
         table.SetColumnSpan(noteActionPanel, 2);
 
         Label tagsLabel = new() { Text = "Tag 选择", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-        table.Controls.Add(tagsLabel, 0, 6);
+        table.Controls.Add(tagsLabel, 0, 7);
         table.SetColumnSpan(tagsLabel, 1);
 
         TableLayoutPanel tagsPanel = new()
@@ -229,20 +317,22 @@ public class UploaderForm : Form
         _tagsFlowPanel.Dock = DockStyle.Fill;
         tagsPanel.Controls.Add(tagsHeaderPanel, 0, 0);
         tagsPanel.Controls.Add(_tagsFlowPanel, 0, 1);
-        table.Controls.Add(tagsPanel, 1, 6);
+        table.Controls.Add(tagsPanel, 1, 7);
         table.SetColumnSpan(tagsPanel, 3);
 
         Label dependenciesLabel = new() { Text = "依赖ID(逗号/换行分隔)", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-        table.Controls.Add(dependenciesLabel, 0, 7);
+        table.Controls.Add(dependenciesLabel, 0, 8);
         table.SetColumnSpan(dependenciesLabel, 1);
-        table.Controls.Add(_dependenciesTextBox, 1, 7);
-        table.SetColumnSpan(_dependenciesTextBox, 3);
+        table.Controls.Add(_dependenciesTextBox, 1, 8);
+        table.SetColumnSpan(_dependenciesTextBox, 2);
         _dependenciesTextBox.Dock = DockStyle.Fill;
+        _updateDependenciesCheckBox.Dock = DockStyle.Fill;
+        table.Controls.Add(_updateDependenciesCheckBox, 3, 8);
 
         Label statusLabel = new() { Text = "上传日志", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
-        table.Controls.Add(statusLabel, 0, 8);
+        table.Controls.Add(statusLabel, 0, 9);
         _statusTextBox.Dock = DockStyle.Fill;
-        table.Controls.Add(_statusTextBox, 1, 8);
+        table.Controls.Add(_statusTextBox, 1, 9);
         table.SetColumnSpan(_statusTextBox, 3);
 
         return table;
@@ -350,6 +440,7 @@ public class UploaderForm : Form
         _itemIdTextBox.Text = string.Empty;
         _titleTextBox.Text = string.Empty;
         _descriptionTextBox.Text = string.Empty;
+        _localizedDetailsTextBox.Text = string.Empty;
         _changeNoteTextBox.Text = string.Empty;
         _visibilityComboBox.SelectedItem = "private";
         _customTagsTextBox.Text = string.Empty;
@@ -361,8 +452,10 @@ public class UploaderForm : Form
         }
 
         _updateDetailsCheckBox.Checked = true;
+        _updateLocalizedDetailsCheckBox.Checked = false;
         _updateChangeNoteCheckBox.Checked = true;
         _updateTagsCheckBox.Checked = true;
+        _updateDependenciesCheckBox.Checked = false;
         UpdateSectionEnabledState();
     }
 
@@ -373,8 +466,11 @@ public class UploaderForm : Form
         _descriptionTextBox.Text = config.description ?? string.Empty;
         _changeNoteTextBox.Text = config.changeNote ?? string.Empty;
         _updateDetailsCheckBox.Checked = config.title != null || config.description != null;
+        _updateLocalizedDetailsCheckBox.Checked =
+            (config.localizedTitles?.Count ?? 0) > 0 || (config.localizedDescriptions?.Count ?? 0) > 0;
         _updateChangeNoteCheckBox.Checked = config.changeNote != null;
         _updateTagsCheckBox.Checked = config.tags != null;
+        _updateDependenciesCheckBox.Checked = config.dependencies != null;
 
         if (!string.IsNullOrWhiteSpace(config.visibility) && _visibilityComboBox.Items.Contains(config.visibility))
         {
@@ -398,6 +494,7 @@ public class UploaderForm : Form
 
         _customTagsTextBox.Text = string.Join(", ", customTags);
         _dependenciesTextBox.Text = string.Join(Environment.NewLine, config.dependencies ?? []);
+        _localizedDetailsTextBox.Text = BuildLocalizedDetailsText(config.localizedTitles, config.localizedDescriptions);
         UpdateSectionEnabledState();
     }
 
@@ -409,14 +506,26 @@ public class UploaderForm : Form
             return false;
         }
 
+        if (!TryParseLocalizedDetails(
+                _localizedDetailsTextBox.Text,
+                out Dictionary<string, string> localizedTitles,
+                out Dictionary<string, string> localizedDescriptions,
+                out string? parseError))
+        {
+            MessageBox.Show(parseError ?? "多语言格式不正确。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
         ModConfig config = new()
         {
             title = _updateDetailsCheckBox.Checked ? EmptyToNull(_titleTextBox.Text) : null,
             description = _updateDetailsCheckBox.Checked ? EmptyToNull(_descriptionTextBox.Text) : null,
+            localizedTitles = _updateLocalizedDetailsCheckBox.Checked ? localizedTitles : null,
+            localizedDescriptions = _updateLocalizedDetailsCheckBox.Checked ? localizedDescriptions : null,
             changeNote = _updateChangeNoteCheckBox.Checked ? EmptyToNull(_changeNoteTextBox.Text) : null,
             visibility = _visibilityComboBox.SelectedItem?.ToString() ?? "private",
             tags = _updateTagsCheckBox.Checked ? BuildTags() : null,
-            dependencies = BuildDependencies()
+            dependencies = _updateDependenciesCheckBox.Checked ? BuildDependencies() : null
         };
 
         string configPath = Path.Combine(_workspacePath, "workshop.json");
@@ -553,22 +662,170 @@ public class UploaderForm : Form
         return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
     }
 
+    private static string BuildLocalizedDetailsText(
+        Dictionary<string, string>? localizedTitles,
+        Dictionary<string, string>? localizedDescriptions)
+    {
+        HashSet<string> languages = [];
+        if (localizedTitles != null)
+        {
+            foreach (string language in localizedTitles.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    languages.Add(language);
+                }
+            }
+        }
+
+        if (localizedDescriptions != null)
+        {
+            foreach (string language in localizedDescriptions.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    languages.Add(language);
+                }
+            }
+        }
+
+        if (languages.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        List<string> lines = [];
+        foreach (string language in languages.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            string title = localizedTitles != null && localizedTitles.TryGetValue(language, out string? t) ? t : "";
+            string description =
+                localizedDescriptions != null && localizedDescriptions.TryGetValue(language, out string? d) ? d : "";
+            lines.Add($"{language}|{EscapeInlineValue(title)}|{EscapeInlineValue(description)}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static bool TryParseLocalizedDetails(
+        string rawText,
+        out Dictionary<string, string> localizedTitles,
+        out Dictionary<string, string> localizedDescriptions,
+        out string? error)
+    {
+        localizedTitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        localizedDescriptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        error = null;
+
+        string[] lines = rawText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].Trim();
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            string[] parts = line.Split('|', 3);
+            if (parts.Length != 3)
+            {
+                error = $"多语言第 {i + 1} 行格式错误。应为: 语言|标题|描述";
+                return false;
+            }
+
+            string language = parts[0].Trim();
+            if (string.IsNullOrWhiteSpace(language))
+            {
+                error = $"多语言第 {i + 1} 行语言代码为空。";
+                return false;
+            }
+
+            string title = parts[1].Trim();
+            string description = parts[2].Trim();
+
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                localizedTitles[language] = UnescapeInlineValue(title);
+            }
+
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                localizedDescriptions[language] = UnescapeInlineValue(description);
+            }
+        }
+
+        return true;
+    }
+
+    private static string EscapeInlineValue(string input)
+    {
+        return input
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("|", "\\|", StringComparison.Ordinal);
+    }
+
+    private static string UnescapeInlineValue(string input)
+    {
+        return input
+            .Replace("\\n", Environment.NewLine, StringComparison.Ordinal)
+            .Replace("\\|", "|", StringComparison.Ordinal)
+            .Replace("\\\\", "\\", StringComparison.Ordinal);
+    }
+
+    private void InsertLanguageTemplate()
+    {
+        if (_languageCodeComboBox.SelectedItem is not LanguageOption option)
+        {
+            return;
+        }
+
+        string code = option.Code;
+        string[] lines = _localizedDetailsTextBox.Text
+            .Split([Environment.NewLine], StringSplitOptions.None);
+
+        bool exists = lines.Any(line => line.StartsWith(code + "|", StringComparison.OrdinalIgnoreCase));
+        if (exists)
+        {
+            MessageBox.Show($"语言 {code} 已存在。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string templateLine = $"{code}||";
+        if (string.IsNullOrWhiteSpace(_localizedDetailsTextBox.Text))
+        {
+            _localizedDetailsTextBox.Text = templateLine;
+        }
+        else
+        {
+            _localizedDetailsTextBox.AppendText(Environment.NewLine + templateLine);
+        }
+
+        _localizedDetailsTextBox.Focus();
+    }
+
     private void UpdateSectionEnabledState()
     {
         bool updateDetails = _updateDetailsCheckBox.Checked;
+        bool updateLocalizedDetails = _updateLocalizedDetailsCheckBox.Checked;
         bool updateChangeNote = _updateChangeNoteCheckBox.Checked;
         bool updateTags = _updateTagsCheckBox.Checked;
+        bool updateDependencies = _updateDependenciesCheckBox.Checked;
 
         _titleTextBox.Enabled = updateDetails;
         _descriptionTextBox.Enabled = updateDetails;
+        _localizedDetailsTextBox.Enabled = updateLocalizedDetails;
 
         _changeNoteTextBox.Enabled = updateChangeNote;
 
+        _languageCodeComboBox.Enabled = updateLocalizedDetails;
+        _insertLanguageTemplateButton.Enabled = updateLocalizedDetails;
         foreach (CheckBox tagCheckBox in _tagCheckBoxes)
         {
             tagCheckBox.Enabled = updateTags;
         }
         _customTagsTextBox.Enabled = updateTags;
+        _dependenciesTextBox.Enabled = updateDependencies;
     }
 
     private void HandleLogMessage(string message)
