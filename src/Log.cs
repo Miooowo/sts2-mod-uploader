@@ -2,6 +2,8 @@
 
 public static class Log
 {
+    public static event Action<string>? MessageLogged;
+
     private static readonly FileStream FileStream;
     private static readonly StreamWriter StreamWriter;
 
@@ -17,6 +19,7 @@ public static class Log
         {
             Console.WriteLine(log);
             StreamWriter.WriteLine(log);
+            MessageLogged?.Invoke(log);
         }
     }
     
@@ -26,6 +29,7 @@ public static class Log
         {
             Console.WriteLine($"\x1b[33m{log}\x1b[0m");
             StreamWriter.WriteLine(log);
+            MessageLogged?.Invoke($"[WARN] {log}");
         }
     }
     
@@ -35,6 +39,7 @@ public static class Log
         {
             Console.WriteLine($"\x1b[31m{log}\x1b[0m");
             StreamWriter.WriteLine(log);
+            MessageLogged?.Invoke($"[ERROR] {log}");
         }
     }
 

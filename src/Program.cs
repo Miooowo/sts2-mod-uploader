@@ -1,5 +1,8 @@
 ﻿using System.CommandLine;
 using Steamworks;
+#if WINDOWS
+using System.Windows.Forms;
+#endif
 
 namespace ModUploader;
 
@@ -8,6 +11,9 @@ public static class Program
     private static bool _shutdown;
     private static Task? _steamCallbacksTask;
     
+#if WINDOWS
+    [STAThread]
+#endif
     public static int Main(string[] args)
     {
         try
@@ -21,10 +27,15 @@ public static class Program
 
             if (args.Length == 0)
             {
+#if WINDOWS
+                LaunchGui();
+                return 0;
+#else
                 Log.Info(
                     "Since you have supplied no arguments, I'll create a workspace in a default location.\nAdd --help to the command if you wish to know what else this program can do.");
                 NewCommand.CreateNewWorkspace();
                 return 0;
+#endif
             }
 
             Option<DirectoryInfo> newWorkspaceOption = new("--workspace", "-w")
@@ -132,5 +143,14 @@ public static class Program
             await Task.Delay(50);
         }
     }
+
+#if WINDOWS
+    private static void LaunchGui()
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.Run(new UploaderForm());
+    }
+#endif
 
 }

@@ -17,3 +17,23 @@
 
 ## Reporting Issues
 After running the uploader, you should see a file called "mod-uploader.log" appear in the directory. Send this file to the devs along with any info about what you were trying to do.
+
+## Visual Uploader (Desktop GUI)
+
+On Windows, running `ModUploader.exe` with **no arguments** now opens a desktop GUI.
+
+### Features
+- Select the mod workspace folder with a picker.
+- Drag and drop a workspace folder onto the window.
+- Edit workshop fields (`title`, `description`, `changeNote`).
+- Choose visibility (`private`, `friends_only`, `unlisted`, `public`).
+- Select workshop tags with built-in checkboxes and optional custom tags.
+- Set dependencies and optional item ID.
+- Save `workshop.json` and upload directly from the GUI.
+
+### Build
+Run:
+
+```bash
+dotnet build -f net8.0-windows
+```
