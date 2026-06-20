@@ -13,6 +13,12 @@ public class UploaderForm : Form
         public override string ToString() => $"{DisplayName} ({Code})";
     }
 
+    private sealed class LanguageTagOption
+    {
+        public required string Value { get; init; }
+        public required string DisplayName { get; init; }
+    }
+
     private static readonly string[] DefaultTags =
     [
         "Acts",
@@ -36,23 +42,47 @@ public class UploaderForm : Form
         "Misc"
     ];
 
-    private static readonly string[] DefaultLanguageTags =
+    private static readonly LanguageTagOption[] DefaultLanguageTags =
     [
-        "English",
-        "Simplified Chinese",
-        "Traditional Chinese",
-        "Japanese",
-        "Korean",
-        "French",
-        "German",
-        "Spanish - Spain",
-        "Russian",
-        "Portuguese - Portugal",
-        "Portuguese - Brazil",
-        "Italian",
-        "Polish",
-        "Thai"
+        new() { Value = "english", DisplayName = "English" },
+        new() { Value = "schinese", DisplayName = "Simplified Chinese" },
+        new() { Value = "tchinese", DisplayName = "Traditional Chinese" },
+        new() { Value = "japanese", DisplayName = "Japanese" },
+        new() { Value = "koreana", DisplayName = "Korean" },
+        new() { Value = "french", DisplayName = "French" },
+        new() { Value = "german", DisplayName = "German" },
+        new() { Value = "spanish", DisplayName = "Spanish - Spain" },
+        new() { Value = "russian", DisplayName = "Russian" },
+        new() { Value = "portuguese", DisplayName = "Portuguese - Portugal" },
+        new() { Value = "brazilian", DisplayName = "Portuguese - Brazil" },
+        new() { Value = "italian", DisplayName = "Italian" },
+        new() { Value = "polish", DisplayName = "Polish" },
+        new() { Value = "thai", DisplayName = "Thai" }
     ];
+
+    private static readonly Dictionary<string, string> LanguageTagAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["english"] = "english",
+        ["simplified chinese"] = "schinese",
+        ["schinese"] = "schinese",
+        ["traditional chinese"] = "tchinese",
+        ["tchinese"] = "tchinese",
+        ["japanese"] = "japanese",
+        ["korean"] = "koreana",
+        ["koreana"] = "koreana",
+        ["french"] = "french",
+        ["german"] = "german",
+        ["spanish - spain"] = "spanish",
+        ["spanish"] = "spanish",
+        ["russian"] = "russian",
+        ["portuguese - portugal"] = "portuguese",
+        ["portuguese"] = "portuguese",
+        ["portuguese - brazil"] = "brazilian",
+        ["brazilian"] = "brazilian",
+        ["italian"] = "italian",
+        ["polish"] = "polish",
+        ["thai"] = "thai"
+    };
 
     private static readonly LanguageOption[] CommonLanguageOptions =
     [
@@ -138,11 +168,12 @@ public class UploaderForm : Form
             _tagsFlowPanel.Controls.Add(tagCheckBox);
         }
 
-        foreach (string languageTag in DefaultLanguageTags)
+        foreach (LanguageTagOption languageTag in DefaultLanguageTags)
         {
             CheckBox languageTagCheckBox = new()
             {
-                Text = languageTag,
+                Text = languageTag.DisplayName,
+                Tag = languageTag.Value,
                 AutoSize = false,
                 Width = 120,
                 Height = 24,
@@ -528,8 +559,10 @@ public class UploaderForm : Form
         List<string> customTags = [];
         foreach (string tag in config.tags ?? [])
         {
+            string normalizedTag = NormalizeLanguageTag(tag);
             CheckBox? languageTagCheckBox = _languageTagCheckBoxes.FirstOrDefault(
-                c => string.Equals(c.Text, tag, StringComparison.OrdinalIgnoreCase));
+                c => string.Equals(c.Tag as string, normalizedTag, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(c.Text, tag, StringComparison.OrdinalIgnoreCase));
             if (languageTagCheckBox != null)
             {
                 languageTagCheckBox.Checked = true;
@@ -688,7 +721,7 @@ public class UploaderForm : Form
                 continue;
             }
 
-            string value = languageTagCheckBox.Text ?? string.Empty;
+            string value = languageTagCheckBox.Tag as string ?? languageTagCheckBox.Text ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(value) &&
                 !tags.Contains(value, StringComparer.OrdinalIgnoreCase))
             {
@@ -731,6 +764,12 @@ public class UploaderForm : Form
     private static string? EmptyToNull(string text)
     {
         return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    private static string NormalizeLanguageTag(string value)
+    {
+        string trimmed = value.Trim();
+        return LanguageTagAliases.TryGetValue(trimmed, out string? normalized) ? normalized : trimmed;
     }
 
     private static string BuildLocalizedDetailsText(
