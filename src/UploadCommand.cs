@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 using Steamworks;
 
 namespace ModUploader;
@@ -61,6 +62,11 @@ public static class UploadCommand
             Log.Error($"Invalid visibility '{modConfig.visibility}' in workshop.json! Should be: private, public, unlisted, or friends_only");
             return 1;
         }
+
+        Dictionary<string, string>? localizedDescriptions = BuildLocalizedDescriptions(
+            workspaceDirectory,
+            contentDirectoryInfo,
+            modConfig.localizedDescriptions);
 
         ulong? modIdTxt = null;
         
@@ -221,7 +227,7 @@ public static class UploadCommand
         bool localizedOk = await UpdateLocalizedMetadata(
             workshopItem,
             modConfig.localizedTitles,
-            modConfig.localizedDescriptions);
+            localizedDescriptions);
         if (!localizedOk)
         {
             return 1;
@@ -473,5 +479,191 @@ public static class UploadCommand
         }
 
         return true;
+    }
+
+    private static Dictionary<string, string>? BuildLocalizedDescriptions(
+        DirectoryInfo workspaceDirectory,
+        DirectoryInfo contentDirectoryInfo,
+        Dictionary<string, string>? existingLocalizedDescriptions)
+    {
+        Dictionary<string, string> merged = new(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> kv in existingLocalizedDescriptions ?? new Dictionary<string, string>())
+        {
+            if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            {
+                merged[kv.Key.Trim()] = kv.Value;
+            }
+        }
+
+        foreach (KeyValuePair<string, string> fromFile in LoadLocalizedDescriptionsFromFiles(workspaceDirectory, contentDirectoryInfo))
+        {
+            merged[fromFile.Key] = fromFile.Value;
+        }
+
+        return merged.Count == 0 ? null : merged;
+    }
+
+    private static Dictionary<string, string> LoadLocalizedDescriptionsFromFiles(
+        DirectoryInfo workspaceDirectory,
+        DirectoryInfo contentDirectoryInfo)
+    {
+        Dictionary<string, string> localized = new(StringComparer.OrdinalIgnoreCase);
+        List<string> candidateDirectories =
+        [
+            Path.Combine(contentDirectoryInfo.FullName, "description"),
+            Path.Combine(contentDirectoryInfo.FullName, "descriptions"),
+            Path.Combine(workspaceDirectory.FullName, "description"),
+            Path.Combine(workspaceDirectory.FullName, "descriptions")
+        ];
+
+        HashSet<string> seenDirs = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string dir in candidateDirectories)
+        {
+            if (!seenDirs.Add(dir) || !Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            foreach (string markdownPath in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
+            {
+                string stem = Path.GetFileNameWithoutExtension(markdownPath);
+                string? language = NormalizeLanguageCode(stem);
+                if (language == null)
+                {
+                    Log.Warn($"Skipped localized description file '{markdownPath}' because language code could not be recognized.");
+                    continue;
+                }
+
+                string markdown = File.ReadAllText(markdownPath);
+                if (string.IsNullOrWhiteSpace(markdown))
+                {
+                    continue;
+                }
+
+                localized[language] = MarkdownToBbCode(markdown);
+                Log.Info($"Loaded localized description for '{language}' from '{markdownPath}'.");
+            }
+        }
+
+        return localized;
+    }
+
+    private static string? NormalizeLanguageCode(string raw)
+    {
+        string key = raw.Trim().ToLowerInvariant().Replace("_", "-");
+        Dictionary<string, string> aliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["en"] = "english",
+            ["eng"] = "english",
+            ["english"] = "english",
+            ["zh"] = "schinese",
+            ["zhs"] = "schinese",
+            ["zh-cn"] = "schinese",
+            ["cn"] = "schinese",
+            ["schinese"] = "schinese",
+            ["zht"] = "tchinese",
+            ["zh-tw"] = "tchinese",
+            ["tchinese"] = "tchinese",
+            ["tw"] = "tchinese",
+            ["ja"] = "japanese",
+            ["jp"] = "japanese",
+            ["jpn"] = "japanese",
+            ["japanese"] = "japanese",
+            ["ko"] = "koreana",
+            ["kr"] = "koreana",
+            ["kor"] = "koreana",
+            ["korean"] = "koreana",
+            ["koreana"] = "koreana",
+            ["fr"] = "french",
+            ["fra"] = "french",
+            ["fre"] = "french",
+            ["french"] = "french",
+            ["de"] = "german",
+            ["ger"] = "german",
+            ["deu"] = "german",
+            ["german"] = "german",
+            ["es"] = "spanish",
+            ["spa"] = "spanish",
+            ["spanish"] = "spanish",
+            ["ru"] = "russian",
+            ["rus"] = "russian",
+            ["russian"] = "russian",
+            ["it"] = "italian",
+            ["ita"] = "italian",
+            ["italian"] = "italian",
+            ["pl"] = "polish",
+            ["pol"] = "polish",
+            ["polish"] = "polish",
+            ["pt"] = "portuguese",
+            ["pt-pt"] = "portuguese",
+            ["portuguese"] = "portuguese",
+            ["br"] = "brazilian",
+            ["pt-br"] = "brazilian",
+            ["brazilian"] = "brazilian",
+            ["th"] = "thai",
+            ["tha"] = "thai",
+            ["thai"] = "thai"
+        };
+
+        return aliases.TryGetValue(key, out string? code) ? code : null;
+    }
+
+    private static string MarkdownToBbCode(string markdown)
+    {
+        string text = markdown.Replace("\r\n", "\n");
+
+        text = Regex.Replace(text, "```([\\s\\S]*?)```", m =>
+        {
+            string code = m.Groups[1].Value.Trim('\n');
+            return $"[code]{code}[/code]";
+        }, RegexOptions.Multiline);
+
+        text = Regex.Replace(text, @"(?m)^#{1,6}\s*(.+)$", "[b]$1[/b]");
+        text = Regex.Replace(text, @"\[(.+?)\]\((https?://[^\s)]+)\)", "[url=$2]$1[/url]");
+        text = Regex.Replace(text, @"\*\*(.+?)\*\*", "[b]$1[/b]");
+        text = Regex.Replace(text, @"__(.+?)__", "[b]$1[/b]");
+        text = Regex.Replace(text, @"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", "[i]$1[/i]");
+        text = Regex.Replace(text, @"(?<!_)_(?!\s)(.+?)(?<!\s)_(?!_)", "[i]$1[/i]");
+        text = Regex.Replace(text, @"`([^`]+)`", "[code]$1[/code]");
+
+        string[] lines = text.Split('\n');
+        List<string> output = [];
+        bool inList = false;
+
+        foreach (string rawLine in lines)
+        {
+            string line = rawLine.TrimEnd();
+            Match ul = Regex.Match(line, @"^\s*[-*+]\s+(.+)$");
+            Match ol = Regex.Match(line, @"^\s*\d+\.\s+(.+)$");
+            bool isList = ul.Success || ol.Success;
+
+            if (isList)
+            {
+                if (!inList)
+                {
+                    output.Add("[list]");
+                    inList = true;
+                }
+
+                string item = ul.Success ? ul.Groups[1].Value : ol.Groups[1].Value;
+                output.Add($"[*]{item}");
+                continue;
+            }
+
+            if (inList)
+            {
+                output.Add("[/list]");
+                inList = false;
+            }
+
+            output.Add(line);
+        }
+
+        if (inList)
+        {
+            output.Add("[/list]");
+        }
+
+        return string.Join(Environment.NewLine, output).Trim();
     }
 }

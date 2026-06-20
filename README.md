@@ -30,6 +30,8 @@ On Windows, running `ModUploader.exe` with **no arguments** now opens a desktop 
 - Optional multilingual title/description updates (one line per language: `lang|title|description`).
 - Built-in language picker to insert common language codes.
 - In multilingual description, write `\n` to represent line breaks.
+- Auto-read `description/*.md` files and detect language codes intelligently (e.g. `en`, `zhs`, `zht`, `ja`, `pt-br`).
+- Convert Markdown descriptions to BBCode automatically before uploading to Steam Workshop.
 - Choose visibility (`private`, `friends_only`, `unlisted`, `public`).
 - Select workshop tags with built-in checkboxes and optional custom tags.
 - Set dependencies and optional item ID (dependency updates are opt-in via checkbox).
