@@ -33,7 +33,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - name: Publish
-        run: dotnet publish "ModUploader.csproj" -c Release -f ${{ matrix.framework }} -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o "out/${{ matrix.rid }}"
+        run: dotnet publish "ModUploader.csproj" -c Release -f ${{ matrix.framework }} -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:EnableWindowsTargeting=true -o "out/${{ matrix.rid }}"
       - name: Archive
         run: cd "out/${{ matrix.rid }}" && zip -r "${{ github.workspace }}/ModUploader-${{ matrix.rid }}.zip" .
       - name: Upload artifact
