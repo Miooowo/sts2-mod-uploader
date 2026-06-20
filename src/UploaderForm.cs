@@ -36,6 +36,24 @@ public class UploaderForm : Form
         "Misc"
     ];
 
+    private static readonly string[] DefaultLanguageTags =
+    [
+        "English",
+        "Simplified Chinese",
+        "Traditional Chinese",
+        "Japanese",
+        "Korean",
+        "French",
+        "German",
+        "Spanish - Spain",
+        "Russian",
+        "Portuguese - Portugal",
+        "Portuguese - Brazil",
+        "Italian",
+        "Polish",
+        "Thai"
+    ];
+
     private static readonly LanguageOption[] CommonLanguageOptions =
     [
         new() { Code = "english", DisplayName = "English" },
@@ -75,6 +93,15 @@ public class UploaderForm : Form
         Padding = new Padding(4, 4, 4, 4)
     };
     private readonly List<CheckBox> _tagCheckBoxes = [];
+    private readonly FlowLayoutPanel _languageTagsFlowPanel = new()
+    {
+        AutoScroll = false,
+        WrapContents = true,
+        FlowDirection = FlowDirection.LeftToRight,
+        Margin = new Padding(0),
+        Padding = new Padding(2, 2, 2, 2)
+    };
+    private readonly List<CheckBox> _languageTagCheckBoxes = [];
     private readonly CheckBox _updateTagsCheckBox = new() { Text = "更新标签", Checked = true };
     private readonly TextBox _customTagsTextBox = new();
     private readonly CheckBox _updateDependenciesCheckBox = new() { Text = "更新依赖", Checked = false };
@@ -109,6 +136,20 @@ public class UploaderForm : Form
             };
             _tagCheckBoxes.Add(tagCheckBox);
             _tagsFlowPanel.Controls.Add(tagCheckBox);
+        }
+
+        foreach (string languageTag in DefaultLanguageTags)
+        {
+            CheckBox languageTagCheckBox = new()
+            {
+                Text = languageTag,
+                AutoSize = false,
+                Width = 120,
+                Height = 24,
+                Margin = new Padding(2, 1, 8, 1)
+            };
+            _languageTagCheckBoxes.Add(languageTagCheckBox);
+            _languageTagsFlowPanel.Controls.Add(languageTagCheckBox);
         }
 
         _updateDetailsCheckBox.CheckedChanged += (_, _) => UpdateSectionEnabledState();
@@ -161,7 +202,7 @@ public class UploaderForm : Form
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); // 4: 描述
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 110)); // 5: 多语言
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));  // 6: 更新说明
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 150)); // 7: Tag
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 190)); // 7: Tag
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // 8: 依赖
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // 9: 日志
 
@@ -290,10 +331,11 @@ public class UploaderForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Padding = new Padding(0)
         };
         tagsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        tagsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         tagsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         TableLayoutPanel tagsHeaderPanel = new()
@@ -314,9 +356,11 @@ public class UploaderForm : Form
         _customTagsTextBox.Dock = DockStyle.Fill;
         tagsHeaderPanel.Controls.Add(_customTagsTextBox, 2, 0);
 
+        _languageTagsFlowPanel.Dock = DockStyle.Fill;
         _tagsFlowPanel.Dock = DockStyle.Fill;
         tagsPanel.Controls.Add(tagsHeaderPanel, 0, 0);
-        tagsPanel.Controls.Add(_tagsFlowPanel, 0, 1);
+        tagsPanel.Controls.Add(_languageTagsFlowPanel, 0, 1);
+        tagsPanel.Controls.Add(_tagsFlowPanel, 0, 2);
         table.Controls.Add(tagsPanel, 1, 7);
         table.SetColumnSpan(tagsPanel, 3);
 
@@ -450,6 +494,10 @@ public class UploaderForm : Form
         {
             tagCheckBox.Checked = false;
         }
+        foreach (CheckBox languageTagCheckBox in _languageTagCheckBoxes)
+        {
+            languageTagCheckBox.Checked = false;
+        }
 
         _updateDetailsCheckBox.Checked = true;
         _updateLocalizedDetailsCheckBox.Checked = false;
@@ -480,6 +528,14 @@ public class UploaderForm : Form
         List<string> customTags = [];
         foreach (string tag in config.tags ?? [])
         {
+            CheckBox? languageTagCheckBox = _languageTagCheckBoxes.FirstOrDefault(
+                c => string.Equals(c.Text, tag, StringComparison.OrdinalIgnoreCase));
+            if (languageTagCheckBox != null)
+            {
+                languageTagCheckBox.Checked = true;
+                continue;
+            }
+
             CheckBox? tagCheckBox = _tagCheckBoxes.FirstOrDefault(
                 c => string.Equals(c.Text, tag, StringComparison.OrdinalIgnoreCase));
             if (tagCheckBox != null)
@@ -620,6 +676,21 @@ public class UploaderForm : Form
 
             string value = tagCheckBox.Text ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(value))
+            {
+                tags.Add(value.Trim());
+            }
+        }
+
+        foreach (CheckBox languageTagCheckBox in _languageTagCheckBoxes)
+        {
+            if (!languageTagCheckBox.Checked)
+            {
+                continue;
+            }
+
+            string value = languageTagCheckBox.Text ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(value) &&
+                !tags.Contains(value, StringComparer.OrdinalIgnoreCase))
             {
                 tags.Add(value.Trim());
             }
@@ -823,6 +894,10 @@ public class UploaderForm : Form
         foreach (CheckBox tagCheckBox in _tagCheckBoxes)
         {
             tagCheckBox.Enabled = updateTags;
+        }
+        foreach (CheckBox languageTagCheckBox in _languageTagCheckBoxes)
+        {
+            languageTagCheckBox.Enabled = updateTags;
         }
         _customTagsTextBox.Enabled = updateTags;
         _dependenciesTextBox.Enabled = updateDependencies;
